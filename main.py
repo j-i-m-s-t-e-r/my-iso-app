@@ -30,9 +30,10 @@ except Exception as e:
     logger.error(f"Failed to load AI model: {e}")
     sys.exit(1)
 
+# 3. INITIALIZE APP (This was missing in your error)
 app = FastAPI()
 
-# 3. MOUNT STATIC FILES
+# 4. MOUNT STATIC FILES
 # This serves your index.html and any future CSS/JS
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -69,7 +70,7 @@ async def convert_image(file: UploadFile = File(...)):
             input_img.save(buffer, format="PNG")
             processed_input_bytes = buffer.getvalue()
 
-        # 4. REMOVE BACKGROUND
+        # 5. REMOVE BACKGROUND
         # We pass the pre-loaded 'session' to speed it up
         try:
             no_bg_data = remove(processed_input_bytes, session=session)
@@ -78,7 +79,7 @@ async def convert_image(file: UploadFile = File(...)):
             logger.error(f"REMBG Error: {bg_error}")
             raise HTTPException(status_code=500, detail="AI Background Removal Failed")
 
-        # 5. ISOMETRIC TRANSFORMATION
+        # 6. ISOMETRIC TRANSFORMATION
         with Image.open(io.BytesIO(no_bg_data)) as img:
             img = img.convert("RGBA")
             
@@ -107,7 +108,7 @@ async def convert_image(file: UploadFile = File(...)):
         # This returns a 500 error to the browser so the JS can catch it
         raise HTTPException(status_code=500, detail=str(e))
 
-# 6. APP ENTRY POINT
+# 7. APP ENTRY POINT
 if __name__ == "__main__":
     # Render sets the PORT environment variable. Default to 10000 locally.
     port = int(os.environ.get("PORT", 10000))
