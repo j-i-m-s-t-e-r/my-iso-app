@@ -7,12 +7,13 @@ from rembg import remove, new_session
 from PIL import Image
 import io
 
-# Initialize the model session on startup to prevent "downloading" lag
-new_session("u2net")
+# FIX: Use 'u2netp' (lightweight/phone version) instead of 'u2net'
+# This saves ~150MB of RAM and prevents the crash.
+model_name = "u2netp"
+session = new_session(model_name)
 
 app = FastAPI()
 
-# Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/")
@@ -26,7 +27,9 @@ def health_check():
 @app.post("/convert")
 async def convert_image(file: UploadFile = File(...)):
     input_data = await file.read()
-    no_bg_data = remove(input_data)
+    
+    # FIX: Pass the pre-loaded session to the remove function
+    no_bg_data = remove(input_data, session=session)
     
     with Image.open(io.BytesIO(no_bg_data)) as img:
         img = img.convert("RGBA")
@@ -41,9 +44,6 @@ async def convert_image(file: UploadFile = File(...)):
 
     return Response(content=output_data, media_type="image/png")
 
-# --- NEW SECTION: Programmatic Start ---
 if __name__ == "__main__":
-    # Get the PORT from Render's environment, default to 10000 if missing
     port = int(os.environ.get("PORT", 10000))
-    # Run Uvicorn directly from Python
     uvicorn.run(app, host="0.0.0.0", port=port)
