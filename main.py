@@ -3,6 +3,7 @@ import uvicorn
 import logging
 import sys
 import io
+import gc  # Garbage Collector
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import Response, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -17,14 +18,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# 2. GLOBAL SESSION VAR (Init as None)
-# We don't load the model here anymore. We wait until the first request.
+# 2. GLOBAL SESSION VAR
 session = None
 model_name = "u2netp"
 
 app = FastAPI()
 
-# 3. MOUNT STATIC FILES
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/")
@@ -41,31 +40,43 @@ async def convert_image(file: UploadFile = File(...)):
     try:
         logger.info(f"Received file: {file.filename}")
         
-        # --- LAZY LOAD: Load Model only when needed ---
+        # --- LAZY LOAD WITH EXPLICIT CPU MODE ---
         if session is None:
-            logger.info(f"First run detected. Loading AI model ({model_name})...")
+            logger.info(f"Loading AI model ({model_name})...")
             try:
-                session = new_session(model_name)
-                logger.info("AI Model loaded!")
+                # Force CPU provider to prevent GPU scanning memory leaks
+                session = new_session(model_name, providers=['CPUExecutionProvider'])
+                logger.info("AI Model loaded on CPU.")
             except Exception as load_err:
                 logger.error(f"Model Load Failed: {load_err}")
                 raise HTTPException(status_code=500, detail="Server failed to wake up AI.")
 
-        # --- READ & RESIZE ---
+        # --- READ & AGGRESSIVE RESIZE ---
         input_data = await file.read()
         
         with Image.open(io.BytesIO(input_data)) as input_img:
             input_img = input_img.convert("RGBA")
-            # Resize for memory safety (Free Tier Limit)
-            if input_img.width > 800 or input_img.height > 800:
-                input_img.thumbnail((800, 800), Image.Resampling.LANCZOS)
+            
+            # Reduce to 500px (Safe for 512MB RAM)
+            # 500px is enough for almost all logo use cases
+            max_dim = 500
+            if input_img.width > max_dim or input_img.height > max_dim:
+                logger.info(f"Resizing from {input_img.size} to {max_dim}px for stability.")
+                input_img.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
             
             buffer = io.BytesIO()
             input_img.save(buffer, format="PNG")
             processed_input_bytes = buffer.getvalue()
 
+        # --- FORCE GARBAGE COLLECTION ---
+        # Clear out the original massive file from RAM before AI starts
+        del input_data
+        gc.collect()
+
         # --- PROCESS ---
+        logger.info("Starting AI Background Removal...")
         no_bg_data = remove(processed_input_bytes, session=session)
+        logger.info("Background removed.")
         
         with Image.open(io.BytesIO(no_bg_data)) as img:
             img = img.convert("RGBA")
@@ -82,6 +93,8 @@ async def convert_image(file: UploadFile = File(...)):
 
     except Exception as e:
         logger.error(f"CRITICAL ERROR: {str(e)}")
+        # If we crash here, force GC again to recover server
+        gc.collect()
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
