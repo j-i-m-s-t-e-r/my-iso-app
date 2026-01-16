@@ -1,5 +1,8 @@
 FROM python:3.11-slim-bookworm
 
+# 1. Enable Unbuffered Logging (Critical for debugging)
+ENV PYTHONUNBUFFERED=1
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1-mesa-glx \
     libglib2.0-0 \
@@ -8,13 +11,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 COPY requirements.txt .
-# Explicitly install onnxruntime (CPU) to prevent it hunting for GPU packages
-RUN pip install --no-cache-dir onnxruntime rembg[cpu] fastapi python-multipart uvicorn pillow numpy
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Speed up startup
 ENV ONNXRUNTIME_EXECUTION_PROVIDERS=CPUExecutionProvider
 
-# --- FIX: Pre-download the LIGHTWEIGHT model ---
+# Pre-download the model to disk (so the first user request is faster)
 ENV U2NET_HOME=/app/.u2net
 RUN mkdir -p $U2NET_HOME \
     && python -c "from rembg import new_session; new_session('u2netp')"
@@ -22,4 +24,5 @@ RUN mkdir -p $U2NET_HOME \
 COPY main.py .
 COPY static ./static
 
+# Run python directly (Handing control to your main.py logic)
 CMD ["python", "main.py"]
