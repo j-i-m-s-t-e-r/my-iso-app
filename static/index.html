@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IsoConverter</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f4f4f9; display: flex; flex-direction: column; align-items: center; padding: 50px; }
+        .container { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); text-align: center; max-width: 500px; width: 100%; }
+        h1 { margin-bottom: 20px; color: #333; }
+        .upload-box { border: 2px dashed #ccc; padding: 30px; border-radius: 8px; cursor: pointer; transition: 0.2s; margin-bottom: 20px; }
+        .upload-box:hover { border-color: #666; background: #fafafa; }
+        button { background-color: #007bff; color: white; border: none; padding: 12px 24px; font-size: 16px; border-radius: 6px; cursor: pointer; transition: 0.2s; }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        #result-area { margin-top: 30px; display: none; }
+        img { max-width: 100%; margin-top: 10px; border: 1px solid #ddd; border-radius: 4px; }
+        .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: 20px auto; display: none; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Isometric Converter</h1>
+    <p>Upload a flat logo. Get a transparent, 30° isometric PNG.</p>
+    
+    <div class="upload-box" onclick="document.getElementById('fileInput').click()">
+        <p id="fileName">Click to Select File</p>
+        <input type="file" id="fileInput" accept="image/png, image/jpeg" style="display: none" onchange="updateFileName()">
+    </div>
+
+    <button id="convertBtn" onclick="processImage()">Convert Image</button>
+    
+    <div class="spinner" id="spinner"></div>
+
+    <div id="result-area">
+        <h3>Result:</h3>
+        <img id="resultImage" src="" alt="Isometric Result">
+        <br><br>
+        <a id="downloadLink" href="#" download="isometric_logo.png">
+            <button style="background-color: #28a745;">Download PNG</button>
+        </a>
+    </div>
+</div>
+
+<script>
+    function updateFileName() {
+        const input = document.getElementById('fileInput');
+        document.getElementById('fileName').innerText = input.files.length > 0 ? input.files[0].name : "Click to Select File";
+    }
+
+    async function processImage() {
+        const input = document.getElementById('fileInput');
+        if (input.files.length === 0) return alert("Please select a file first.");
+
+        // UI Updates
+        document.getElementById('convertBtn').disabled = true;
+        document.getElementById('spinner').style.display = 'block';
+        document.getElementById('result-area').style.display = 'none';
+
+        const formData = new FormData();
+        formData.append('file', input.files[0]);
+
+        try {
+            const response = await fetch('/convert', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) throw new Error("Conversion failed");
+
+            // Convert response blob to an image URL
+            const blob = await response.blob();
+            const imageUrl = URL.createObjectURL(blob);
+
+            // Display result
+            const img = document.getElementById('resultImage');
+            img.src = imageUrl;
+            
+            // Setup download link
+            const dlLink = document.getElementById('downloadLink');
+            dlLink.href = imageUrl;
+            
+            document.getElementById('result-area').style.display = 'block';
+        } catch (error) {
+            alert("Error processing image. The server might be busy starting up.");
+            console.error(error);
+        } finally {
+            document.getElementById('spinner').style.display = 'none';
+            document.getElementById('convertBtn').disabled = false;
+        }
+    }
+</script>
+
+</body>
+</html>
